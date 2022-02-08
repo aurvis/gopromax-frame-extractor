@@ -7,8 +7,8 @@ import shutil
 import subprocess
 import glob
 import xml.etree.ElementTree as XET
-
-from pandas import read_excel
+import re
+import fnmatch
 
 def assert_file_exists(filename, tag=""):
     stag = "file "
@@ -28,6 +28,26 @@ def assert_folder_exists(folder, tag=""):
 
 def delete_directory(folder):
     shutil.rmtree(folder, ignore_errors=True)
+
+def get_files_with_pattern(ifolder,pattern,ignore_case=True,return_full_path=True):
+    if ignore_case:
+        rule = re.compile(fnmatch.translate(pattern), re.IGNORECASE)
+    else:
+        rule = re.compile(fnmatch.translate(pattern))
+    if return_full_path:
+        return sorted([ os.path.join(ifolder,name) for name in os.listdir(ifolder) if rule.match(name)])
+    else:
+        return sorted([ name for name in os.listdir(ifolder) if rule.match(name)])
+
+def remove_files(folder,file_pattern):
+    # Get a list of all the file paths that ends with .txt from in specified directory
+    file_list = get_files_with_pattern(folder,file_pattern)
+    # Iterate over the list of filepaths & remove each file.
+    for fpath in file_list:
+        try:
+            os.remove(fpath)
+        except:
+            print("Error while deleting file : ", fpath)
 
 def make_directory(root_folder,subfolders='',remove_if_present=False):
     if subfolders == '':
@@ -79,8 +99,8 @@ def get_gps_date_time(xml_metadata_file):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='generates geotagged and metadata updated equirectangular frames from gopro .360 video file')
 
-    parser.add_argument( '--video-file', '-vf',  type=str, help='video file path',                      default=None )
-    parser.add_argument( '--output-folder', '-of', type=str, help='output folder', default='/tmp/gopromax' )
+    parser.add_argument( '--video-file', '-vf',  type=str, help='video file path',                      default='/mnt/f/data/gopro-max/GS010080.360' )
+    parser.add_argument( '--output-folder', '-of', type=str, help='output folder', default='/tmp/test' )
     parser.add_argument( '--frame-rate', '-fps', type=int, help='how many frames to extract per frame', default=1    )
     parser.add_argument( '--quality', '-q',   type=int, help='frame extraction quality', default=2    )
     parser.add_argument( '--bin-dir', '-b',   type=str, help='directory that contains the MAX2spherebatch exec', default='/home/tola/code/reference/max2sphere-batch/' )
@@ -106,9 +126,7 @@ if __name__ == '__main__':
     eac_stitcher_exe = os.path.join(bin_dir,'MAX2spherebatch')
     assert_file_exists(video_file)
 
-    scratch=False
-
-    make_directory(output_folder,remove_if_present=scratch)
+    make_directory(output_folder,remove_if_present=True)
 
     #
     # Frame Extraction
@@ -116,8 +134,8 @@ if __name__ == '__main__':
     print("\n#\n# Extract Frames\n#")
     t0_folder = os.path.join(output_folder,"track0")
     t5_folder = os.path.join(output_folder,"track5")
-    make_directory(t0_folder,remove_if_present=scratch)
-    make_directory(t5_folder,remove_if_present=scratch)
+    make_directory(t0_folder,remove_if_present=True)
+    make_directory(t5_folder,remove_if_present=True)
 
     cmd=f"ffmpeg -i {video_file} -map 0:0 -r {frame_rate} -q:v {quality} {t0_folder}/img%04d.jpg -map 0:5 -r {frame_rate} -q:v {quality} {t5_folder}/img%04d.jpg"
     print( f"cmd: {cmd}")
@@ -133,7 +151,7 @@ if __name__ == '__main__':
     print( f"cmd: {cmd}")
     run_command(cmd, show_progress=False)
     frames_folder = os.path.join(output_folder,"frames")
-    make_directory(frames_folder,remove_if_present=scratch)
+    make_directory(frames_folder,remove_if_present=True)
     move_all_files(t0_folder, frames_folder, "*_sphere.jpg")
     delete_directory(t0_folder)
     delete_directory(t5_folder)
@@ -143,7 +161,7 @@ if __name__ == '__main__':
     #
     print("\n#\n# Extract Metadata\n#")
     metadata_folder = os.path.join(output_folder,"metadata")
-    make_directory(metadata_folder,remove_if_present=scratch)
+    make_directory(metadata_folder,remove_if_present=True)
 
     gps_track_file = os.path.join(metadata_folder,"gps_track.gpx")
     cmd=f"exiftool -ee -p {script_dir}/gpx.fmt {video_file} > {gps_track_file}"
@@ -175,6 +193,7 @@ if __name__ == '__main__':
     cmd = "exiftool -fileorder FileName -ext jpg '-datetimeoriginal+<0:0:${filesequence;$_*=%f}' %s" % (frame_delta,frames_folder)
     print( f"cmd: {cmd}")
     run_command(cmd, show_progress=False)
+
     # geotag the images
     cmd= "exiftool -ext jpg -geotag %s '-geotime<${DateTimeOriginal}+00:00' %s" % (gps_track_file, frames_folder)
     print( f"cmd: {cmd}")
@@ -183,5 +202,6 @@ if __name__ == '__main__':
     cmd = f"exiftool -make=GoPro -model=Max -ProjectionType=equirectangular -UsePanoramaViewer=True -CroppedAreaImageWidthPixels=4096 -CroppedAreaImageHeightPixels=1344 -FullPanoWidthPixels=4096 -FullPanoHeightPixels=1344 -CroppedAreaLeftPixels=0 -CroppedAreaTopPixels=0 {frames_folder}"
     print( f"cmd: {cmd}")
     run_command(cmd, show_progress=False)
+    remove_files(frames_folder,"*.jpg_original")
 
     print("\n")
