@@ -99,11 +99,11 @@ def get_gps_date_time(xml_metadata_file):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='generates geotagged and metadata updated equirectangular frames from gopro .360 video file')
 
-    parser.add_argument( '--video-file', '-vf',  type=str, help='video file path',                      default='/mnt/f/data/gopro-max/GS010080.360' )
+    parser.add_argument( '--video-file', '-vf',  type=str, help='video file path',                      default=None )
     parser.add_argument( '--output-folder', '-of', type=str, help='output folder', default='/tmp/test' )
     parser.add_argument( '--frame-rate', '-fps', type=int, help='how many frames to extract per frame', default=1    )
     parser.add_argument( '--quality', '-q',   type=int, help='frame extraction quality', default=2    )
-    parser.add_argument( '--bin-dir', '-b',   type=str, help='directory that contains the MAX2spherebatch exec', default='/home/tola/code/reference/max2sphere-batch/' )
+    parser.add_argument( '--bin-dir', '-b',   type=str, help='directory that contains the MAX2spherebatch exec', default='bin/' )
 
     args, unknown_args = parser.parse_known_args()
     if len(unknown_args) != 0:
@@ -114,17 +114,18 @@ if __name__ == '__main__':
 
     video_file = args.video_file
     frame_rate = args.frame_rate
-    bin_dir    = args.bin_dir
-    quality    = args.quality
     output_folder = args.output_folder
+    quality    = args.quality
     frame_delta = 1.0/frame_rate
     print( f"frame_delta: {frame_delta}" )
 
     assert_file_exists(video_file,"video file")
+
+    bin_dir = os.path.join(script_dir,args.bin_dir)
     assert_folder_exists(bin_dir)
 
     eac_stitcher_exe = os.path.join(bin_dir,'MAX2spherebatch')
-    assert_file_exists(video_file)
+    assert_file_exists(eac_stitcher_exe)
 
     make_directory(output_folder,remove_if_present=True)
 
@@ -147,12 +148,15 @@ if __name__ == '__main__':
     print("\n#\n# Compute Equirectangular Frames\n#")
     no_frames = number_of_files(t0_folder)
     print( f"number of frames extracted: {no_frames}" )
-    cmd = f"{eac_stitcher_exe} -w 4096 -n 1 -m {no_frames} {output_folder}track%d/img%04d.jpg"
+    cmd = f"{eac_stitcher_exe} -w 4096 -n 1 -m {no_frames} {output_folder}/track%d/img%04d.jpg"
     print( f"cmd: {cmd}")
     run_command(cmd, show_progress=False)
     frames_folder = os.path.join(output_folder,"frames")
     make_directory(frames_folder,remove_if_present=True)
     move_all_files(t0_folder, frames_folder, "*_sphere.jpg")
+    if number_of_files(frames_folder) == 0:
+        print("no sphere files extracted.")
+        sys.exit(1)
     delete_directory(t0_folder)
     delete_directory(t5_folder)
 
